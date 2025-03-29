@@ -6,7 +6,7 @@ COPY . .
 
 # Proxy
 WORKDIR /mx-chain-proxy-go/cmd/proxy
-RUN go build -ldflags="-X main.appVersion=$(git describe --tags --long --dirty) -X main.commitID=$(git rev-parse HEAD)"
+RUN go build -ldflags="-X main.appVersion=devnet -X main.commitID=latest"
 
 # ===== SECOND STAGE ======
 FROM ubuntu:22.04
