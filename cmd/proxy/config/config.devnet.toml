@@ -74,48 +74,20 @@
 # Snapshotless observers are observers that can only respond to real-time requests, such as vm queries. They should have IsSnapshotless = true
 [[Observers]]
    ShardId = 0
-   Address = "http://65.108.7.21:8080"
+   Address = "http://152.53.231.120:8080"
+   # IsSnapshotless = true
 
 [[Observers]]
    ShardId = 1
-   Address = "http://65.108.7.21:8081"
+   Address = "http://152.53.231.120:8081"
+   # IsSnapshotless = true
 
 [[Observers]]
    ShardId = 2
-   Address = "http://65.108.7.21:8082"
+   Address = "http://152.53.231.120:8082"
+   # IsSnapshotless = true
 
 [[Observers]]
    ShardId = 4294967295
-   Address = "http://65.108.7.21:8083"
-
-[[Observers]]
-   ShardId = 0
-   Address = "http://65.108.199.150:8080"
-
-[[Observers]]
-   ShardId = 1
-   Address = "http://65.108.199.150:8081"
-
-[[Observers]]
-   ShardId = 2
-   Address = "http://65.108.199.150:8082"
-   
-[[Observers]]
-   ShardId = 4294967295
-   Address = "http://65.108.199.150:8083"
-
-[[Observers]]
-   ShardId = 0
-   Address = "http://152.53.88.219:8080"
-
-[[Observers]]
-   ShardId = 1
-   Address = "http://152.53.88.219:8081"
-
-[[Observers]]
-   ShardId = 2
-   Address = "http://152.53.88.219:8082"
-
-[[Observers]]
-   ShardId = 4294967295
-   Address = "http://152.53.88.219:8083"
+   Address = "http://152.53.231.120:8083"
+   # IsSnapshotless = true

@@ -16,4 +16,4 @@ COPY --from=builder /mx-chain-proxy-go/cmd/proxy /mx-chain-proxy-go/cmd/proxy
 
 WORKDIR /mx-chain-proxy-go/cmd/proxy/
 EXPOSE 8080
-ENTRYPOINT ["./proxy", "--start-swagger-ui"]
+ENTRYPOINT ["./proxy", "--start-swagger-ui", "--config", "config/config.devnet.toml"]
