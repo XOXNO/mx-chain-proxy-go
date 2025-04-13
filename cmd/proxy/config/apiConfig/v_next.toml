@@ -139,5 +139,5 @@ Routes = [
 [APIPackages.status]
 Routes = [
     { Name = "/metrics", Secured = false, Open = false, RateLimit = 0 },
-    { Name = "/prometheus-metrics", Secured = false, Open = false, RateLimit = 0 }
+    { Name = "/prometheus-metrics", Secured = false, Open = true, RateLimit = 0 }
 ]
