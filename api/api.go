@@ -40,6 +40,7 @@ func CreateServer(
 	isProfileModeActivated bool,
 	shouldStartSwaggerUI bool,
 ) (*http.Server, error) {
+	gin.SetMode(gin.ReleaseMode)
 	ws := gin.Default()
 	ws.Use(cors.Default())
 

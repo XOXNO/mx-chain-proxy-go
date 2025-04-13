@@ -4,7 +4,7 @@
    ServerPort = 8080
 
    # RequestTimeoutSec represents the maximum number of seconds a request can last until throwing an error
-   RequestTimeoutSec = 80
+   RequestTimeoutSec = 100
 
    # HeartbeatCacheValidityDurationSec represents the maximum number of seconds the heartbeat cache data is valid before it
    # should be updated
@@ -37,7 +37,7 @@
 
    # AllowEntireTxPoolFetch represents the flag that enables the transactions pool API
    # With this flag disabled, /transaction/pool route will return an error
-   AllowEntireTxPoolFetch = false
+   AllowEntireTxPoolFetch = true
 
    # NumShardsTimeoutInSec represents the maximum number of seconds to wait for at least one observer online until throwing an error
    NumShardsTimeoutInSec = 90
