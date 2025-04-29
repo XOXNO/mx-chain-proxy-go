@@ -107,3 +107,19 @@
 #    ShardId = 4294967295
 #    Address = "http://152.53.88.219:8083"
 #    IsSnapshotless = true
+
+[[Observers]]
+   ShardId = 0
+   Address = "http://95.216.208.35:8080"
+
+[[Observers]]
+   ShardId = 1
+   Address = "http://95.216.208.35:8081"
+
+[[Observers]]
+   ShardId = 2
+   Address = "http://95.216.208.35:8082"
+
+[[Observers]]
+   ShardId = 4294967295
+   Address = "http://95.216.208.35:8083"
