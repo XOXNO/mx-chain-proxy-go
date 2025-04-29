@@ -88,22 +88,22 @@
    ShardId = 4294967295
    Address = "http://65.108.7.21:8083"
 
-[[Observers]]
-   ShardId = 0
-   Address = "http://152.53.88.219:8080"
-   # IsSnapshotless = true
+# [[Observers]]
+#    ShardId = 0
+#    Address = "http://152.53.88.219:8080"
+#    IsSnapshotless = true
 
-[[Observers]]
-   ShardId = 1
-   Address = "http://152.53.88.219:8081"
-   # IsSnapshotless = true
+# [[Observers]]
+#    ShardId = 1
+#    Address = "http://152.53.88.219:8081"
+#    IsSnapshotless = true
 
-[[Observers]]
-   ShardId = 2
-   Address = "http://152.53.88.219:8082"
-   # IsSnapshotless = true
+# [[Observers]]
+#    ShardId = 2
+#    Address = "http://152.53.88.219:8082"
+#    IsSnapshotless = true
 
-[[Observers]]
-   ShardId = 4294967295
-   Address = "http://152.53.88.219:8083"
-   # IsSnapshotless = true
+# [[Observers]]
+#    ShardId = 4294967295
+#    Address = "http://152.53.88.219:8083"
+#    IsSnapshotless = true
