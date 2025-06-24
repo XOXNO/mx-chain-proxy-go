@@ -19,7 +19,6 @@ import (
 	"github.com/multiversx/mx-chain-proxy-go/common"
 	proxyData "github.com/multiversx/mx-chain-proxy-go/data"
 	"github.com/multiversx/mx-chain-proxy-go/observer"
-	"github.com/multiversx/mx-chain-proxy-go/process/resilience"
 )
 
 var log = logger.GetOrCreate("process")
@@ -45,9 +44,7 @@ type BaseProcessor struct {
 	cancelFunc                     func()
 	noStatusCheck                  bool
 
-	httpClient         *http.Client
-	circuitBreakerFactory resilience.CircuitBreakerFactory
-	circuitBreakerConfig  resilience.CircuitBreakerConfig
+	httpClient *http.Client
 }
 
 // NewBaseProcessor creates a new instance of BaseProcessor struct
@@ -58,30 +55,6 @@ func NewBaseProcessor(
 	fullHistoryNodesProvider observer.NodesProviderHandler,
 	pubKeyConverter core.PubkeyConverter,
 	noStatusCheck bool,
-) (*BaseProcessor, error) {
-	defaultCircuitBreakerConfig := resilience.CircuitBreakerConfig{
-		Enabled: false,
-	}
-	return NewBaseProcessorWithCircuitBreaker(
-		requestTimeoutSec,
-		shardCoord,
-		observersProvider,
-		fullHistoryNodesProvider,
-		pubKeyConverter,
-		noStatusCheck,
-		defaultCircuitBreakerConfig,
-	)
-}
-
-// NewBaseProcessorWithCircuitBreaker creates a new instance of BaseProcessor struct with circuit breaker support
-func NewBaseProcessorWithCircuitBreaker(
-	requestTimeoutSec int,
-	shardCoord common.Coordinator,
-	observersProvider observer.NodesProviderHandler,
-	fullHistoryNodesProvider observer.NodesProviderHandler,
-	pubKeyConverter core.PubkeyConverter,
-	noStatusCheck bool,
-	circuitBreakerConfig resilience.CircuitBreakerConfig,
 ) (*BaseProcessor, error) {
 	if check.IfNil(shardCoord) {
 		return nil, ErrNilShardCoordinator
@@ -114,21 +87,11 @@ func NewBaseProcessorWithCircuitBreaker(
 		delayForCheckingNodesSyncState: stepDelayForCheckingNodesSyncState,
 		chanTriggerNodesState:          make(chan struct{}),
 		noStatusCheck:                  noStatusCheck,
-		circuitBreakerFactory:          resilience.NewCircuitBreakerFactory(),
-		circuitBreakerConfig:           circuitBreakerConfig,
 	}
 	bp.nodeStatusFetcher = bp.getNodeStatusResponseFromAPI
 
 	if noStatusCheck {
 		log.Info("Proxy started with no status check! The provided observers will always be considered synced!")
-	}
-
-	if circuitBreakerConfig.Enabled {
-		log.Info("Circuit breaker enabled", 
-			"failure_threshold", circuitBreakerConfig.FailureThreshold,
-			"recovery_timeout_sec", circuitBreakerConfig.RecoveryTimeoutSec,
-			"half_open_max_calls", circuitBreakerConfig.HalfOpenMaxCalls,
-			"success_threshold", circuitBreakerConfig.SuccessThreshold)
 	}
 
 	return bp, nil
@@ -234,48 +197,8 @@ func (bp *BaseProcessor) CallGetRestEndPoint(
 	path string,
 	value interface{},
 ) (int, error) {
-	return bp.callGetRestEndPointWithCircuitBreaker(context.Background(), address, path, value)
-}
 
-func (bp *BaseProcessor) callGetRestEndPointWithCircuitBreaker(
-	ctx context.Context,
-	address string,
-	path string,
-	value interface{},
-) (int, error) {
-	if !bp.circuitBreakerConfig.Enabled {
-		return bp.doGetRequest(ctx, address, path, value)
-	}
-
-	circuitBreaker := bp.circuitBreakerFactory.CreateCircuitBreaker(address, bp.circuitBreakerConfig)
-	
-	var statusCode int
-	var result error
-
-	err := circuitBreaker.Execute(ctx, func(ctx context.Context) error {
-		var execErr error
-		statusCode, execErr = bp.doGetRequest(ctx, address, path, value)
-		return execErr
-	})
-
-	if err != nil {
-		if resilience.IsCircuitBreakerError(err) {
-			log.Warn("Circuit breaker blocked request", "address", address, "path", path, "error", err)
-			return http.StatusServiceUnavailable, err
-		}
-		return statusCode, err
-	}
-
-	return statusCode, result
-}
-
-func (bp *BaseProcessor) doGetRequest(
-	ctx context.Context,
-	address string,
-	path string,
-	value interface{},
-) (int, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", address+path, nil)
+	req, err := http.NewRequest("GET", address+path, nil)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -327,55 +250,13 @@ func (bp *BaseProcessor) CallPostRestEndPoint(
 	data interface{},
 	response interface{},
 ) (int, error) {
-	return bp.callPostRestEndPointWithCircuitBreaker(context.Background(), address, path, data, response)
-}
 
-func (bp *BaseProcessor) callPostRestEndPointWithCircuitBreaker(
-	ctx context.Context,
-	address string,
-	path string,
-	data interface{},
-	response interface{},
-) (int, error) {
-	if !bp.circuitBreakerConfig.Enabled {
-		return bp.doPostRequest(ctx, address, path, data, response)
-	}
-
-	circuitBreaker := bp.circuitBreakerFactory.CreateCircuitBreaker(address, bp.circuitBreakerConfig)
-	
-	var statusCode int
-	var result error
-
-	err := circuitBreaker.Execute(ctx, func(ctx context.Context) error {
-		var execErr error
-		statusCode, execErr = bp.doPostRequest(ctx, address, path, data, response)
-		return execErr
-	})
-
-	if err != nil {
-		if resilience.IsCircuitBreakerError(err) {
-			log.Warn("Circuit breaker blocked request", "address", address, "path", path, "error", err)
-			return http.StatusServiceUnavailable, err
-		}
-		return statusCode, err
-	}
-
-	return statusCode, result
-}
-
-func (bp *BaseProcessor) doPostRequest(
-	ctx context.Context,
-	address string,
-	path string,
-	data interface{},
-	response interface{},
-) (int, error) {
 	buff, err := json.Marshal(data)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", address+path, bytes.NewReader(buff))
+	req, err := http.NewRequest("POST", address+path, bytes.NewReader(buff))
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -512,54 +393,16 @@ func (bp *BaseProcessor) updateNodesWithSync() {
 }
 
 func (bp *BaseProcessor) getNodesWithSyncStatus(nodes []*proxyData.NodeData) []*proxyData.NodeData {
-	if len(nodes) == 0 {
-		return make([]*proxyData.NodeData, 0)
-	}
+	nodesToReturn := make([]*proxyData.NodeData, 0)
+	for _, node := range nodes {
+		isSynced, err := bp.isNodeSynced(node)
+		if err != nil {
+			log.Warn("cannot get node status. will mark as inactive", "address", node.Address, "error", err)
+			isSynced = false
+		}
 
-	// Use parallelized node checking for better performance
-	return bp.getNodesWithSyncStatusParallel(nodes)
-}
-
-// getNodesWithSyncStatusParallel checks node sync status concurrently to reduce monitoring overhead
-func (bp *BaseProcessor) getNodesWithSyncStatusParallel(nodes []*proxyData.NodeData) []*proxyData.NodeData {
-	type nodeResult struct {
-		node     *proxyData.NodeData
-		isSynced bool
-		index    int
-	}
-
-	// Create channels for coordination
-	resultChan := make(chan nodeResult, len(nodes))
-	
-	// Start goroutines for each node check
-	for i, node := range nodes {
-		go func(nodeIndex int, nodeToCheck *proxyData.NodeData) {
-			isSynced, err := bp.isNodeSynced(nodeToCheck)
-			if err != nil {
-				log.Warn("cannot get node status. will mark as inactive", "address", nodeToCheck.Address, "error", err)
-				isSynced = false
-			}
-
-			resultChan <- nodeResult{
-				node:     nodeToCheck,
-				isSynced: isSynced,
-				index:    nodeIndex,
-			}
-		}(i, node)
-	}
-
-	// Collect results maintaining original order
-	results := make([]nodeResult, len(nodes))
-	for i := 0; i < len(nodes); i++ {
-		result := <-resultChan
-		results[result.index] = result
-	}
-
-	// Build the return slice in original order
-	nodesToReturn := make([]*proxyData.NodeData, len(nodes))
-	for i, result := range results {
-		result.node.IsSynced = result.isSynced
-		nodesToReturn[i] = result.node
+		node.IsSynced = isSynced
+		nodesToReturn = append(nodesToReturn, node)
 	}
 
 	return nodesToReturn

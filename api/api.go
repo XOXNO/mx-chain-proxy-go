@@ -39,25 +39,12 @@ func CreateServer(
 	rateLimitTimeWindowInSeconds int,
 	isProfileModeActivated bool,
 	shouldStartSwaggerUI bool,
-	generalSettings config.GeneralSettingsConfig,
 ) (*http.Server, error) {
 	gin.SetMode(gin.ReleaseMode)
 	ws := gin.Default()
 	ws.Use(cors.Default())
 
-	// Add compression middleware early in the pipeline
-	compressionConfig := middleware.CompressionConfig{
-		Enabled: generalSettings.CompressionEnabled,
-		Level:   generalSettings.CompressionLevel,
-		MinSize: generalSettings.CompressionMinSize,
-	}
-	compressionMiddleware, err := middleware.NewCompressionMiddleware(compressionConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create compression middleware: %w", err)
-	}
-	ws.Use(compressionMiddleware.MiddlewareHandlerFunc())
-
-	err = registerValidators()
+	err := registerValidators()
 	if err != nil {
 		return nil, err
 	}

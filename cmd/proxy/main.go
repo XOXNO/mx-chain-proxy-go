@@ -28,7 +28,6 @@ import (
 	"github.com/multiversx/mx-chain-proxy-go/process"
 	"github.com/multiversx/mx-chain-proxy-go/process/cache"
 	processFactory "github.com/multiversx/mx-chain-proxy-go/process/factory"
-	"github.com/multiversx/mx-chain-proxy-go/process/resilience"
 	"github.com/multiversx/mx-chain-proxy-go/testing"
 	versionsFactory "github.com/multiversx/mx-chain-proxy-go/versions/factory"
 	"github.com/urfave/cli"
@@ -448,22 +447,13 @@ func createVersionsRegistry(
 		return nil, err
 	}
 
-	circuitBreakerConfig := resilience.CircuitBreakerConfig{
-		Enabled:              cfg.GeneralSettings.CircuitBreakerEnabled,
-		FailureThreshold:     cfg.GeneralSettings.CircuitBreakerFailureThreshold,
-		RecoveryTimeoutSec:   cfg.GeneralSettings.CircuitBreakerRecoveryTimeoutSec,
-		HalfOpenMaxCalls:     cfg.GeneralSettings.CircuitBreakerHalfOpenMaxCalls,
-		SuccessThreshold:     cfg.GeneralSettings.CircuitBreakerSuccessThreshold,
-	}
-
-	bp, err := process.NewBaseProcessorWithCircuitBreaker(
+	bp, err := process.NewBaseProcessor(
 		cfg.GeneralSettings.RequestTimeoutSec,
 		shardCoord,
 		observersProvider,
 		fullHistoryNodesProvider,
 		pubKeyConverter,
 		skipStatusCheck,
-		circuitBreakerConfig,
 	)
 	if err != nil {
 		return nil, err
@@ -610,7 +600,6 @@ func startWebServer(
 		generalConfig.GeneralSettings.RateLimitWindowDurationSeconds,
 		isProfileModeActivated,
 		shouldStartSwaggerUI,
-		generalConfig.GeneralSettings,
 	)
 
 	if err != nil {
