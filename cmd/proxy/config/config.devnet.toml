@@ -46,7 +46,7 @@
    TimeBetweenNodesRequestsInSec = 2
 
    # CircuitBreakerEnabled enables circuit breaker pattern to prevent cascade failures
-   CircuitBreakerEnabled = true
+   CircuitBreakerEnabled = false
 
    # CircuitBreakerFailureThreshold is the number of consecutive failures before opening the circuit
    CircuitBreakerFailureThreshold = 5
