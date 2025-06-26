@@ -479,15 +479,6 @@ func (ap *AccountProcessor) GetCodeHash(address string, options common.AccountQu
 	return nil, WrapObserversError(apiResponse.Error)
 }
 
-func (ap *AccountProcessor) getShardIfOdAddress(address string) (uint32, error) {
-	addressBytes, err := ap.pubKeyConverter.Decode(address)
-	if err != nil {
-		return 0, err
-	}
-
-	return ap.proc.ComputeShardId(addressBytes)
-}
-
 func (ap *AccountProcessor) getObserversForAddress(address string, availability data.ObserverDataAvailabilityType, forcedShardID core.OptionalUint32) ([]*data.NodeData, error) {
 	if forcedShardID.HasValue {
 		return ap.proc.GetObservers(forcedShardID.Value, availability)
@@ -549,8 +540,4 @@ func WrapObserversError(responseError string) error {
 	}
 
 	return fmt.Errorf("%w, %s", ErrSendingRequest, responseError)
-}
-
-func (ap *AccountProcessor) getAvailabilityBasedOnAccountQueryOptions(options common.AccountQueryOptions) data.ObserverDataAvailabilityType {
-	return ap.availabilityProvider.AvailabilityForAccountQueryOptions(options)
 }
