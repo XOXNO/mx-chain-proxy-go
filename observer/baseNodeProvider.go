@@ -189,24 +189,38 @@ func (bnp *baseNodeProvider) ReloadNodes(nodesType data.NodeType) data.NodesRelo
 func (bnp *baseNodeProvider) getSyncedNodesForShardUnprotected(shardID uint32, dataAvailability data.ObserverDataAvailabilityType) ([]*data.NodeData, error) {
 	var syncedNodes []*data.NodeData
 
-	syncedNodes = bnp.getSyncedNodes(dataAvailability, shardID)
+	// 1. Try synced and reachable nodes first
+	syncedNodes = bnp.filterReachableNodes(bnp.getSyncedNodes(dataAvailability, shardID))
 	if len(syncedNodes) != 0 {
 		return syncedNodes, nil
 	}
 
-	fallbackNodesSource := bnp.getFallbackNodes(dataAvailability, shardID)
+	// 2. Try fallback nodes that are reachable
+	fallbackNodesSource := bnp.filterReachableNodes(bnp.getFallbackNodes(dataAvailability, shardID))
 	if len(fallbackNodesSource) != 0 {
 		return fallbackNodesSource, nil
 	}
 
-	outOfSyncNodes := bnp.getOutOfSyncNodes(dataAvailability, shardID)
+	// 3. Try out-of-sync but reachable nodes (only if no better options)
+	outOfSyncNodes := bnp.filterReachableNodes(bnp.getOutOfSyncNodes(dataAvailability, shardID))
 	if len(outOfSyncNodes) > 0 {
 		return outOfSyncNodes, nil
 	}
 
-	outOfSyncFallbackNodesSource := bnp.getOutOfSyncFallbackNodes(dataAvailability, shardID)
+	// 4. Try out-of-sync fallback nodes that are reachable
+	outOfSyncFallbackNodesSource := bnp.filterReachableNodes(bnp.getOutOfSyncFallbackNodes(dataAvailability, shardID))
 	if len(outOfSyncFallbackNodesSource) != 0 {
 		return outOfSyncFallbackNodesSource, nil
+	}
+
+	// 5. As last resort, try ANY node (including unreachable ones) but log warning
+	allNodes := bnp.getSyncedNodes(dataAvailability, shardID)
+	allNodes = append(allNodes, bnp.getFallbackNodes(dataAvailability, shardID)...)
+	allNodes = append(allNodes, bnp.getOutOfSyncNodes(dataAvailability, shardID)...)
+	allNodes = append(allNodes, bnp.getOutOfSyncFallbackNodes(dataAvailability, shardID)...)
+	if len(allNodes) > 0 {
+		log.Warn("no reachable observers found, falling back to potentially unreachable nodes", "shard", shardID)
+		return allNodes, nil
 	}
 
 	return nil, ErrShardNotAvailable
@@ -241,6 +255,17 @@ func (bnp *baseNodeProvider) getOutOfSyncNodes(availabilityType data.ObserverDat
 
 func (bnp *baseNodeProvider) getOutOfSyncFallbackNodes(availabilityType data.ObserverDataAvailabilityType, shardID uint32) []*data.NodeData {
 	return bnp.getNodesByType(availabilityType, shardID, bnp.snapshotlessNodes.GetOutOfSyncFallbackNodes, bnp.regularNodes.GetOutOfSyncFallbackNodes)
+}
+
+// filterReachableNodes filters out nodes that are not reachable
+func (bnp *baseNodeProvider) filterReachableNodes(nodes []*data.NodeData) []*data.NodeData {
+	reachableNodes := make([]*data.NodeData, 0, len(nodes))
+	for _, node := range nodes {
+		if node.IsReachable {
+			reachableNodes = append(reachableNodes, node)
+		}
+	}
+	return reachableNodes
 }
 
 func (bnp *baseNodeProvider) getSyncedNodesUnprotected(dataAvailability data.ObserverDataAvailabilityType) ([]*data.NodeData, error) {

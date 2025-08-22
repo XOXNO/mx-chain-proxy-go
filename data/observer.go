@@ -7,6 +7,7 @@ type NodeData struct {
 	IsSynced       bool
 	IsFallback     bool
 	IsSnapshotless bool
+	IsReachable    bool // New field to track if the node is reachable
 }
 
 // NodesReloadResponse is a DTO that holds details about nodes reloading

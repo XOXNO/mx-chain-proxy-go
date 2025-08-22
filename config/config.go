@@ -18,6 +18,14 @@ type GeneralSettingsConfig struct {
 	AllowEntireTxPoolFetch                   bool
 	NumShardsTimeoutInSec                    int
 	TimeBetweenNodesRequestsInSec            int
+	CircuitBreakerEnabled                    bool
+	CircuitBreakerFailureThreshold           int
+	CircuitBreakerRecoveryTimeoutSec         int
+	CircuitBreakerHalfOpenMaxCalls           int
+	CircuitBreakerSuccessThreshold           int
+	CompressionEnabled                       bool
+	CompressionLevel                         int
+	CompressionMinSize                       int
 }
 
 // Config will hold the whole config file's data

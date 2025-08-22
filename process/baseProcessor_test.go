@@ -13,6 +13,7 @@ import (
 
 	"github.com/multiversx/mx-chain-core-go/core"
 	"github.com/multiversx/mx-chain-core-go/core/sharding"
+	"github.com/multiversx/mx-chain-proxy-go/common"
 	"github.com/multiversx/mx-chain-proxy-go/data"
 	"github.com/multiversx/mx-chain-proxy-go/process"
 	"github.com/multiversx/mx-chain-proxy-go/process/mock"
@@ -23,6 +24,16 @@ import (
 type testStruct struct {
 	Nonce int
 	Name  string
+}
+
+func createTestCircuitBreakerManager() *common.CircuitBreakerManager {
+	config := common.CircuitBreakerConfig{
+		FailureThreshold:   5,
+		RecoveryTimeoutSec: 60,
+		HalfOpenMaxCalls:   3,
+		SuccessThreshold:   2,
+	}
+	return common.NewCircuitBreakerManager(config, false) // Disabled for tests
 }
 
 func createTestHttpServer(
@@ -54,6 +65,7 @@ func TestNewBaseProcessor_WithInvalidRequestTimeoutShouldErr(t *testing.T) {
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	assert.Nil(t, bp)
@@ -70,6 +82,7 @@ func TestNewBaseProcessor_WithNilShardCoordinatorShouldErr(t *testing.T) {
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	assert.Nil(t, bp)
@@ -86,6 +99,7 @@ func TestNewBaseProcessor_WithNilObserversProviderShouldErr(t *testing.T) {
 		nil,
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	assert.Nil(t, bp)
@@ -102,6 +116,7 @@ func TestNewBaseProcessor_WithNilFullHistoryNodesProviderShouldErr(t *testing.T)
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	assert.Nil(t, bp)
@@ -118,6 +133,7 @@ func TestNewBaseProcessor_WithOkValuesShouldWork(t *testing.T) {
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	assert.NotNil(t, bp)
@@ -141,6 +157,7 @@ func TestBaseProcessor_GetObserversEmptyListShouldWork(t *testing.T) {
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 	observers, err := bp.GetObservers(0, data.AvailabilityAll)
 
@@ -176,6 +193,7 @@ func TestBaseProcessor_ComputeShardId(t *testing.T) {
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	//there are 2 shards, compute ID should correctly process
@@ -211,6 +229,7 @@ func TestBaseProcessor_CallGetRestEndPoint(t *testing.T) {
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 	_, err := bp.CallGetRestEndPoint(server.URL, "/some/path", tsRecovered)
 
@@ -240,6 +259,7 @@ func TestBaseProcessor_CallGetRestEndPointShouldTimeout(t *testing.T) {
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 	_, err := bp.CallGetRestEndPoint(testServer.URL, "/some/path", tsRecovered)
 
@@ -265,6 +285,7 @@ func TestBaseProcessor_CallPostRestEndPoint(t *testing.T) {
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 	rc, err := bp.CallPostRestEndPoint(server.URL, "/some/path", ts, tsRecv)
 
@@ -296,6 +317,7 @@ func TestBaseProcessor_CallPostRestEndPointShouldTimeout(t *testing.T) {
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 	rc, err := bp.CallPostRestEndPoint(testServer.URL, "/some/path", ts, tsRecv)
 
@@ -337,6 +359,7 @@ func TestBaseProcessor_GetAllObserversWithOkValuesShouldPass(t *testing.T) {
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	assert.Nil(t, err)
@@ -388,6 +411,7 @@ func TestBaseProcessor_GetObserversOnePerShardShouldWork(t *testing.T) {
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	observers, err := bp.GetObserversOnePerShard(data.AvailabilityAll)
@@ -437,6 +461,7 @@ func TestBaseProcessor_GetObserversOnePerShardOneShardHasNoObserverShouldWork(t 
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	observers, err := bp.GetObserversOnePerShard(data.AvailabilityAll)
@@ -486,6 +511,7 @@ func TestBaseProcessor_GetObserversOnePerShardMetachainHasNoObserverShouldWork(t
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	observers, err := bp.GetObserversOnePerShard(data.AvailabilityAll)
@@ -539,6 +565,7 @@ func TestBaseProcessor_GetFullHistoryNodesOnePerShardShouldWork(t *testing.T) {
 		},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	observers, err := bp.GetFullHistoryNodesOnePerShard(data.AvailabilityAll)
@@ -560,6 +587,7 @@ func TestBaseProcessor_GetShardIDs(t *testing.T) {
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	expected := []uint32{0, 1, 2, core.MetachainShardId}
@@ -588,6 +616,7 @@ func TestBaseProcessor_HandleNodesSyncStateShouldSetNodeOutOfSyncIfVMQueriesNotR
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	bp.SetNodeStatusFetcher(func(url string) (*data.NodeStatusAPIResponse, int, error) {
@@ -649,6 +678,7 @@ func TestBaseProcessor_HandleNodesSyncStateShouldTreatObserverThatWasDown(t *tes
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	bp.SetNodeStatusFetcher(func(url string) (*data.NodeStatusAPIResponse, int, error) {
@@ -711,6 +741,7 @@ func TestBaseProcessor_HandleNodesSyncStateShouldBeTriggeredEarlierIfANodeIsOffl
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	bp.SetNodeStatusFetcher(func(url string) (*data.NodeStatusAPIResponse, int, error) {
@@ -760,6 +791,7 @@ func TestBaseProcessor_HandleNodesSyncStateShouldConsiderNodeAsOnlineIfProbableN
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	bp.SetNodeStatusFetcher(func(url string) (*data.NodeStatusAPIResponse, int, error) {
@@ -820,6 +852,7 @@ func TestBaseProcessor_HandleNodesSyncState(t *testing.T) {
 		},
 		&mock.PubKeyConverterMock{},
 		false,
+		createTestCircuitBreakerManager(),
 	)
 
 	bp.SetNodeStatusFetcher(func(url string) (*data.NodeStatusAPIResponse, int, error) {
@@ -870,6 +903,7 @@ func TestBaseProcessor_NoStatusCheck(t *testing.T) {
 		&mock.ObserversProviderStub{},
 		&mock.PubKeyConverterMock{},
 		true,
+		createTestCircuitBreakerManager(),
 	)
 
 	bp.SetNodeStatusFetcher(func(url string) (*data.NodeStatusAPIResponse, int, error) {

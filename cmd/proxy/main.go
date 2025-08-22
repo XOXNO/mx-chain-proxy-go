@@ -447,6 +447,15 @@ func createVersionsRegistry(
 		return nil, err
 	}
 
+	// Create circuit breaker manager
+	circuitBreakerConfig := common.CircuitBreakerConfig{
+		FailureThreshold:   cfg.GeneralSettings.CircuitBreakerFailureThreshold,
+		RecoveryTimeoutSec: cfg.GeneralSettings.CircuitBreakerRecoveryTimeoutSec,
+		HalfOpenMaxCalls:   cfg.GeneralSettings.CircuitBreakerHalfOpenMaxCalls,
+		SuccessThreshold:   cfg.GeneralSettings.CircuitBreakerSuccessThreshold,
+	}
+	circuitBreakerManager := common.NewCircuitBreakerManager(circuitBreakerConfig, cfg.GeneralSettings.CircuitBreakerEnabled)
+
 	bp, err := process.NewBaseProcessor(
 		cfg.GeneralSettings.RequestTimeoutSec,
 		shardCoord,
@@ -454,6 +463,7 @@ func createVersionsRegistry(
 		fullHistoryNodesProvider,
 		pubKeyConverter,
 		skipStatusCheck,
+		circuitBreakerManager,
 	)
 	if err != nil {
 		return nil, err

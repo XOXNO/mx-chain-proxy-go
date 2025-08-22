@@ -227,13 +227,15 @@ func computeInitialNodeList(regularNodes []*data.NodeData, fallbackNodes []*data
 	clonedFallbackNodes := cloneNodesSlice(fallbackNodes)
 
 	mapToReturn := make(map[uint32][]*data.NodeData)
-	// since this function is called at constructor level, consider that all the nodes are active
+	// since this function is called at constructor level, consider that all the nodes are active and reachable
 	for _, node := range clonedRegularNodes {
 		node.IsSynced = true
+		node.IsReachable = true
 		mapToReturn[node.ShardId] = append(mapToReturn[node.ShardId], node)
 	}
 	for _, node := range clonedFallbackNodes {
 		node.IsSynced = true
+		node.IsReachable = true
 		mapToReturn[node.ShardId] = append(mapToReturn[node.ShardId], node)
 	}
 	return mapToReturn
