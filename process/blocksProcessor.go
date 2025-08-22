@@ -56,7 +56,6 @@ func (bp *BlocksProcessor) GetBlocksByRound(round uint64, options common.BlockQu
 				continue
 			}
 
-			log.Info("block requested successfully", "shard id", observer.ShardId, "observer", observer.Address, "round", round)
 			ret.Data.Blocks = append(ret.Data.Blocks, block)
 			break
 		}

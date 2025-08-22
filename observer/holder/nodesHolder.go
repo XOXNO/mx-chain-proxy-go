@@ -181,11 +181,17 @@ func (nh *nodesHolder) printNodesInShardsUnprotected() {
 
 	printHeader := nh.availabilityProvider.GetDescriptionForAvailability(nh.availability)
 	for shard, nodesByCache := range nodesByType {
-		log.Info(fmt.Sprintf("shard %d %s", shard, printHeader),
-			"synced observers", getNodesListAsString(nodesByCache[syncedNodesCache]),
-			"synced fallback observers", getNodesListAsString(nodesByCache[syncedFallbackNodesCache]),
-			"out of sync observers", getNodesListAsString(nodesByCache[outOfSyncNodesCache]),
-			"out of sync fallback observers", getNodesListAsString(nodesByCache[outOfSyncFallbackNodesCache]))
+		// Only log when there are sync issues (out of sync nodes or no synced nodes)
+		hasOutOfSyncNodes := len(nodesByCache[outOfSyncNodesCache]) > 0 || len(nodesByCache[outOfSyncFallbackNodesCache]) > 0
+		hasNoSyncedNodes := len(nodesByCache[syncedNodesCache]) == 0
+		
+		if hasOutOfSyncNodes || hasNoSyncedNodes {
+			log.Warn(fmt.Sprintf("shard %d %s sync issues", shard, printHeader),
+				"synced observers", getNodesListAsString(nodesByCache[syncedNodesCache]),
+				"synced fallback observers", getNodesListAsString(nodesByCache[syncedFallbackNodesCache]),
+				"out of sync observers", getNodesListAsString(nodesByCache[outOfSyncNodesCache]),
+				"out of sync fallback observers", getNodesListAsString(nodesByCache[outOfSyncFallbackNodesCache]))
+		}
 	}
 }
 

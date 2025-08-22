@@ -157,11 +157,6 @@ func (tp *TransactionProcessor) SendTransaction(tx *data.Transaction) (int, stri
 
 		respCode, err := tp.proc.CallPostRestEndPoint(observer.Address, TransactionSendPath, tx, &txResponse)
 		if respCode == http.StatusOK && err == nil {
-			log.Info(fmt.Sprintf("Transaction sent successfully to observer %v from shard %v, received tx hash %s",
-				observer.Address,
-				shardID,
-				txResponse.Data.TxHash,
-			))
 			return respCode, txResponse.Data.TxHash, nil
 		}
 
@@ -261,11 +256,6 @@ func (tp *TransactionProcessor) simulateTransaction(
 
 		respCode, err := tp.proc.CallPostRestEndPoint(observer.Address, txSimulatePath, tx, &txResponse)
 		if respCode == http.StatusOK && err == nil {
-			log.Info(fmt.Sprintf("Transaction simulation sent successfully to observer %v from shard %v, received tx hash %s",
-				observer.Address,
-				observer.ShardId,
-				txResponse.Data.Result.Hash,
-			))
 			return &txResponse, nil
 		}
 

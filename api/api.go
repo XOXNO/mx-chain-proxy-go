@@ -41,7 +41,14 @@ func CreateServer(
 	shouldStartSwaggerUI bool,
 ) (*http.Server, error) {
 	gin.SetMode(gin.ReleaseMode)
-	ws := gin.Default()
+	ws := gin.New()
+
+	// Add recovery middleware (from gin.Default)
+	ws.Use(gin.Recovery())
+
+	// Add custom logger that only logs errors and slow requests
+	ws.Use(customGinLogger(apiLoggingConfig))
+
 	ws.Use(cors.Default())
 
 	err := registerValidators()
@@ -230,4 +237,31 @@ func skValidator(
 	_ string,
 ) bool {
 	return true
+}
+
+// customGinLogger returns a gin logger middleware that only logs errors and slow requests
+func customGinLogger(apiLoggingConfig config.ApiLoggingConfig) gin.HandlerFunc {
+	threshold := time.Duration(apiLoggingConfig.ThresholdInMicroSeconds) * time.Microsecond
+	
+	return func(c *gin.Context) {
+		start := time.Now()
+		
+		// Process request
+		c.Next()
+		
+		// Calculate latency
+		latency := time.Since(start)
+		statusCode := c.Writer.Status()
+		
+		// Only log if there's an error or it's slower than configured threshold
+		if statusCode >= 400 || latency > threshold {
+			log.Warn("HTTP request issue",
+				"method", c.Request.Method,
+				"path", c.Request.URL.Path,
+				"status", statusCode,
+				"latency", latency,
+				"client_ip", c.ClientIP(),
+			)
+		}
+	}
 }

@@ -104,7 +104,6 @@ func (nsp *NodeStatusProcessor) GetNetworkStatusMetrics(shardID uint32) (*data.G
 			continue
 		}
 
-		log.Info("network metrics request", "shard ID", observer.ShardId, "observer", observer.Address)
 		return &responseNetworkMetrics, nil
 
 	}
@@ -128,7 +127,6 @@ func (nsp *NodeStatusProcessor) GetNetworkConfigMetrics() (*data.GenericAPIRespo
 			continue
 		}
 
-		log.Info("network metrics request", "shard ID", observer.ShardId, "observer", observer.Address)
 		return &responseNetworkMetrics, nil
 
 	}

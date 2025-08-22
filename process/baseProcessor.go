@@ -740,15 +740,18 @@ func (bp *BaseProcessor) isNodeSynced(node *proxyData.NodeData) (bool, error) {
 	// If any of the above 2 conditions are met, the node is considered synced
 	isNodeSynced := nonceDifferenceBelowThreshold || probableHighestNonceLessThanOrEqualToNonce
 
-	log.Info("node status",
-		"address", node.Address,
-		"shard", node.ShardId,
-		"nonce", nonce,
-		"probable highest nonce", probableHighestNonce,
-		"is synced", isNodeSynced,
-		"is ready for VM Queries", isReadyForVMQueries,
-		"is snapshotless", node.IsSnapshotless,
-		"is fallback", node.IsFallback)
+	// Only log when there are sync issues
+	if !isNodeSynced || !isReadyForVMQueries {
+		log.Warn("node sync issue",
+			"address", node.Address,
+			"shard", node.ShardId,
+			"nonce", nonce,
+			"probable highest nonce", probableHighestNonce,
+			"is synced", isNodeSynced,
+			"is ready for VM Queries", isReadyForVMQueries,
+			"is snapshotless", node.IsSnapshotless,
+			"is fallback", node.IsFallback)
+	}
 
 	if !isReadyForVMQueries {
 		isNodeSynced = false
@@ -790,16 +793,19 @@ func (bp *BaseProcessor) checkNodeStatus(node *proxyData.NodeData) (bool, bool, 
 	// If any of the above 2 conditions are met, the node is considered synced
 	isNodeSynced := nonceDifferenceBelowThreshold || probableHighestNonceLessThanOrEqualToNonce
 
-	log.Info("node status",
-		"address", node.Address,
-		"shard", node.ShardId,
-		"nonce", nonce,
-		"probable highest nonce", probableHighestNonce,
-		"is synced", isNodeSynced,
-		"is reachable", true,
-		"is ready for VM Queries", isReadyForVMQueries,
-		"is snapshotless", node.IsSnapshotless,
-		"is fallback", node.IsFallback)
+	// Only log when there are sync issues
+	if !isNodeSynced || !isReadyForVMQueries {
+		log.Warn("node sync issue",
+			"address", node.Address,
+			"shard", node.ShardId,
+			"nonce", nonce,
+			"probable highest nonce", probableHighestNonce,
+			"is synced", isNodeSynced,
+			"is reachable", true,
+			"is ready for VM Queries", isReadyForVMQueries,
+			"is snapshotless", node.IsSnapshotless,
+			"is fallback", node.IsFallback)
+	}
 
 	if !isReadyForVMQueries {
 		isNodeSynced = false

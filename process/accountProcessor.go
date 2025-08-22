@@ -63,7 +63,6 @@ func (ap *AccountProcessor) GetAccount(address string, options common.AccountQue
 		url := common.BuildUrlWithAccountQueryOptions(addressPath+address, options)
 		_, err = ap.proc.CallGetRestEndPoint(observer.Address, url, &responseAccount)
 		if err == nil {
-			log.Info("account request", "address", address, "shard ID", observer.ShardId, "observer", observer.Address)
 			return &responseAccount.Data, nil
 		}
 
@@ -136,10 +135,6 @@ func (ap *AccountProcessor) getAccountsInShard(addresses []string, shardID uint3
 	for _, observer := range observers {
 		respCode, err := ap.proc.CallPostRestEndPoint(observer.Address, apiPath, addresses, &apiResponse)
 		if err == nil || respCode == http.StatusBadRequest || respCode == http.StatusInternalServerError {
-			log.Info("bulk accounts request",
-				"shard ID", observer.ShardId,
-				"observer", observer.Address,
-				"http code", respCode)
 			if apiResponse.Error != "" {
 				return nil, errors.New(apiResponse.Error)
 			}
@@ -199,12 +194,6 @@ func (ap *AccountProcessor) GetESDTTokenData(address string, key string, options
 		apiPath = common.BuildUrlWithAccountQueryOptions(apiPath, options)
 		respCode, err := ap.proc.CallGetRestEndPoint(observer.Address, apiPath, &apiResponse)
 		if err == nil || respCode == http.StatusBadRequest || respCode == http.StatusInternalServerError {
-			log.Info("account ESDT token data",
-				"address", address,
-				"token", key,
-				"shard ID", observer.ShardId,
-				"observer", observer.Address,
-				"http code", respCode)
 			if apiResponse.Error != "" {
 				return nil, errors.New(apiResponse.Error)
 			}
@@ -365,11 +354,6 @@ func (ap *AccountProcessor) GetAllESDTTokens(address string, options common.Acco
 		apiPath = common.BuildUrlWithAccountQueryOptions(apiPath, options)
 		respCode, err := ap.proc.CallGetRestEndPoint(observer.Address, apiPath, &apiResponse)
 		if err == nil || respCode == http.StatusBadRequest || respCode == http.StatusInternalServerError {
-			log.Info("account all ESDT tokens",
-				"address", address,
-				"shard ID", observer.ShardId,
-				"observer", observer.Address,
-				"http code", respCode)
 			if apiResponse.Error != "" {
 				return nil, errors.New(apiResponse.Error)
 			}

@@ -61,7 +61,8 @@ func (rlm *responseLoggerMiddleware) MiddlewareHandlerFunc() gin.HandlerFunc {
 		latency := time.Since(t)
 		status := c.Writer.Status()
 
-		shouldLogRequest := latency > rlm.thresholdDurationForLoggingRequest || c.Writer.Status() != http.StatusOK
+		// Only log requests that are problematic (errors or very slow)
+		shouldLogRequest := c.Writer.Status() != http.StatusOK || latency > rlm.thresholdDurationForLoggingRequest*2
 		if shouldLogRequest {
 			requestBodyString = prepareLog(requestBodyString)
 			responseBodyString := prepareLog(bw.body.String())
