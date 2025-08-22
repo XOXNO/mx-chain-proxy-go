@@ -57,6 +57,7 @@ func (group *accountsGroup) respondWithAccount(c *gin.Context, transform func(*d
 
 	options, err := parseAccountQueryOptions(c, address)
 	if err != nil {
+		log.Error("account query options parsing failed", "address", address, "error", err, "url", c.Request.URL.String())
 		shared.RespondWithValidationError(c, errors.ErrBadUrlParams, err)
 		return
 	}

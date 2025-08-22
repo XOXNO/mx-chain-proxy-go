@@ -58,16 +58,21 @@ func (ap *AccountProcessor) GetAccount(address string, options common.AccountQue
 	}
 
 	responseAccount := data.AccountApiResponse{}
+	log.Debug("starting account request with observers", "address", address, "observer_count", len(observers))
 	for _, observer := range observers {
 
 		url := common.BuildUrlWithAccountQueryOptions(addressPath+address, options)
+		log.Debug("calling observer for account", "observer", observer.Address, "address", address, "url", url)
 		_, err = ap.proc.CallGetRestEndPoint(observer.Address, url, &responseAccount)
 		if err == nil {
+			log.Debug("account request successful", "observer", observer.Address, "address", address)
 			return &responseAccount.Data, nil
 		}
 
-		log.Error("account request", "observer", observer.Address, "address", address, "error", err.Error())
+		log.Error("account request failed", "observer", observer.Address, "address", address, "error", err.Error())
 	}
+	
+	log.Error("all observers failed for account request", "address", address, "tried_observers", len(observers))
 
 	return nil, WrapObserversError(responseAccount.Error)
 }

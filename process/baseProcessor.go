@@ -210,102 +210,27 @@ func (bp *BaseProcessor) ComputeShardId(addressBuff []byte) (uint32, error) {
 	return bp.shardCoordinator.ComputeId(addressBuff), nil
 }
 
-// CallGetRestEndPoint calls an external end point (sends a request on a node) with circuit breaker support and automatic failover
+// CallGetRestEndPoint calls an external end point (sends a request on a node) with circuit breaker support
 func (bp *BaseProcessor) CallGetRestEndPoint(
 	address string,
 	path string,
 	value interface{},
 ) (int, error) {
-	// Try the primary observer first
+	log.Debug("GET request started", "observer", address, "path", path)
+	
+	// Execute the request with circuit breaker protection
 	statusCode, err := bp.executeGetRequest(address, path, value)
 	
-	// If primary request succeeds, return immediately
 	if err == nil && statusCode == http.StatusOK {
+		log.Debug("GET request successful", "observer", address, "path", path)
 		return statusCode, nil
 	}
 
-	// If circuit breaker is open or request failed, try failover
-	if bp.shouldAttemptFailover(address, err, statusCode) {
-		log.Debug("attempting failover for GET request", "failed_observer", address, "path", path, "error", err)
-		
-		failoverStatusCode, failoverErr := bp.attemptGetFailover(address, path, value)
-		if failoverErr == nil {
-			return failoverStatusCode, nil
-		}
-		
-		log.Debug("failover also failed", "original_error", err, "failover_error", failoverErr)
-		// Return original error, not failover error, to preserve timeout status codes
-		return statusCode, err
-	}
-
-	// Return original error if no failover succeeded
+	log.Debug("GET request failed", "observer", address, "path", path, "status", statusCode, "error", err)
 	return statusCode, err
 }
 
-// shouldAttemptFailover determines if failover should be attempted based on error conditions
-func (bp *BaseProcessor) shouldAttemptFailover(address string, err error, statusCode int) bool {
-	// Don't attempt failover if circuit breaker is disabled
-	if bp.circuitBreakerManager == nil {
-		return false
-	}
 
-	// Attempt failover for circuit breaker open errors
-	if err != nil && strings.Contains(err.Error(), "circuit breaker open") {
-		return true
-	}
-
-	// Attempt failover for timeout errors
-	if err != nil && (isTimeoutError(err) || strings.Contains(err.Error(), "timeout")) {
-		return true
-	}
-
-	// Attempt failover for connection errors
-	if err != nil && (strings.Contains(err.Error(), "connection") || strings.Contains(err.Error(), "network")) {
-		return true
-	}
-
-	// Attempt failover for service unavailable status
-	if statusCode == http.StatusServiceUnavailable || statusCode == http.StatusNotFound {
-		return true
-	}
-
-	return false
-}
-
-// attemptGetFailover tries to execute the GET request on alternative observers in the same shard
-func (bp *BaseProcessor) attemptGetFailover(failedAddress string, path string, value interface{}) (int, error) {
-	// Get the shard ID for the failed observer
-	shardID, exists := bp.getShardForObserver(failedAddress)
-	if !exists {
-		// If we can't determine the shard, try metachain observers
-		shardID = core.MetachainShardId
-	}
-
-	// Get alternative observers for this shard  
-	observers, err := bp.GetObservers(shardID, proxyData.AvailabilityRecent)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get observers for failover: %w", err)
-	}
-
-	// Try each observer except the failed one
-	for _, observer := range observers {
-		if observer.Address == failedAddress {
-			continue // Skip the failed observer
-		}
-
-		log.Debug("trying failover observer", "observer", observer.Address, "shard", shardID, "failed_observer", failedAddress)
-		
-		statusCode, err := bp.executeGetRequest(observer.Address, path, value)
-		if err == nil && statusCode == http.StatusOK {
-			log.Debug("failover successful", "observer", observer.Address, "shard", shardID)
-			return statusCode, nil
-		}
-
-		log.Debug("failover observer also failed", "observer", observer.Address, "error", err, "status", statusCode)
-	}
-
-	return 0, fmt.Errorf("all observers in shard %d failed for failover", shardID)
-}
 
 // executePostRequest performs the actual POST request with circuit breaker protection
 func (bp *BaseProcessor) executePostRequest(address string, path string, data interface{}, response interface{}) (int, error) {
@@ -380,7 +305,7 @@ func (bp *BaseProcessor) executePostRequest(address string, path string, data in
 				return http.StatusRequestTimeout, execErr
 			}
 			// If we never got a response, assume it's a connection issue
-			return http.StatusNotFound, execErr
+			return http.StatusRequestTimeout, execErr
 		}
 		return responseStatusCode, execErr
 	}
@@ -388,45 +313,12 @@ func (bp *BaseProcessor) executePostRequest(address string, path string, data in
 	return http.StatusOK, nil
 }
 
-// attemptPostFailover tries to execute the POST request on alternative observers in the same shard
-func (bp *BaseProcessor) attemptPostFailover(failedAddress string, path string, data interface{}, response interface{}) (int, error) {
-	// Get the shard ID for the failed observer
-	shardID, exists := bp.getShardForObserver(failedAddress)
-	if !exists {
-		// If we can't determine the shard, try metachain observers
-		shardID = core.MetachainShardId
-	}
-
-	// Get alternative observers for this shard  
-	observers, err := bp.GetObservers(shardID, proxyData.AvailabilityRecent)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get observers for failover: %w", err)
-	}
-
-	// Try each observer except the failed one
-	for _, observer := range observers {
-		if observer.Address == failedAddress {
-			continue // Skip the failed observer
-		}
-
-		log.Debug("trying failover observer", "observer", observer.Address, "shard", shardID, "failed_observer", failedAddress)
-		
-		statusCode, err := bp.executePostRequest(observer.Address, path, data, response)
-		if err == nil && statusCode == http.StatusOK {
-			log.Debug("failover successful", "observer", observer.Address, "shard", shardID)
-			return statusCode, nil
-		}
-
-		log.Debug("failover observer also failed", "observer", observer.Address, "error", err, "status", statusCode)
-	}
-
-	return 0, fmt.Errorf("all observers in shard %d failed for failover", shardID)
-}
 
 // executeGetRequest performs the actual GET request with circuit breaker protection
 func (bp *BaseProcessor) executeGetRequest(address string, path string, value interface{}) (int, error) {
 	// Check circuit breaker before making request
 	if bp.circuitBreakerManager != nil && !bp.circuitBreakerManager.CanExecute(address) {
+		log.Debug("circuit breaker blocked request", "observer", address, "path", path)
 		bp.triggerNodesSyncCheck(address)
 		return http.StatusServiceUnavailable, fmt.Errorf("circuit breaker open for observer %s", address)
 	}
@@ -499,29 +391,17 @@ func (bp *BaseProcessor) CallPostRestEndPoint(
 	data interface{},
 	response interface{},
 ) (int, error) {
-	// Try the primary observer first
+	log.Debug("POST request started", "observer", address, "path", path)
+	
+	// Execute the request with circuit breaker protection
 	statusCode, err := bp.executePostRequest(address, path, data, response)
 	
-	// If primary request succeeds, return immediately
 	if err == nil && statusCode == http.StatusOK {
+		log.Debug("POST request successful", "observer", address, "path", path)
 		return statusCode, nil
 	}
 
-	// If circuit breaker is open or request failed, try failover
-	if bp.shouldAttemptFailover(address, err, statusCode) {
-		log.Debug("attempting failover for POST request", "failed_observer", address, "path", path, "error", err)
-		
-		failoverStatusCode, failoverErr := bp.attemptPostFailover(address, path, data, response)
-		if failoverErr == nil {
-			return failoverStatusCode, nil
-		}
-		
-		log.Debug("failover also failed", "original_error", err, "failover_error", failoverErr)
-		// Return original error, not failover error, to preserve timeout status codes
-		return statusCode, err
-	}
-
-	// Return original error if no failover succeeded
+	log.Debug("POST request failed", "observer", address, "path", path, "status", statusCode, "error", err)
 	return statusCode, err
 }
 
