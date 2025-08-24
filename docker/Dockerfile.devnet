@@ -9,7 +9,7 @@ WORKDIR /mx-chain-proxy-go/cmd/proxy
 RUN go build -ldflags="-X main.appVersion=mainnet -X main.commitID=latest"
 
 # ===== SECOND STAGE ======
-FROM ubuntu:24-alpine
+FROM ubuntu:latest
 RUN apt-get update -y && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
