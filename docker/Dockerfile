@@ -1,25 +1,19 @@
-# ===== BUILD =====
-FROM golang:1.23.6-alpine AS builder
+FROM golang:1.23.6 AS builder
+LABEL maintainer="multiversx"
+
 WORKDIR /mx-chain-proxy-go
-RUN apk add --no-cache git build-base
 COPY . .
 
 # Proxy
 WORKDIR /mx-chain-proxy-go/cmd/proxy
-RUN go build -ldflags="-X main.appVersion=mainnet -X main.commitID=latest" -o /proxy
+RUN go build -ldflags="-X main.appVersion=mainnet -X main.commitID=latest"
 
-# ===== RUNTIME =====
+# ===== SECOND STAGE ======
 FROM alpine:3.20
-RUN apk add --no-cache curl ca-certificates && update-ca-certificates
+RUN apk add --no-cache curl ca-certificates
 
-# copy the built binary; keep your structure simple
-COPY --from=builder /proxy /app/proxy
+COPY --from=builder /mx-chain-proxy-go/cmd/proxy /mx-chain-proxy-go/cmd/proxy
 
-COPY config/config.toml /app/config/config.toml
-
-WORKDIR /app
+WORKDIR /mx-chain-proxy-go/cmd/proxy/
 EXPOSE 8080
-
-# Let’s explicitly point to the path your logs show
-ENV CONFIG_PATH=/app/config/config.toml
-ENTRYPOINT ["/app/proxy","--start-swagger-ui","--config","/app/config/config.toml"]
+ENTRYPOINT ["./proxy", "--start-swagger-ui"]
