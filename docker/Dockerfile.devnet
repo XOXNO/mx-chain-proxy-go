@@ -11,8 +11,11 @@ RUN go build -ldflags="-X main.appVersion=mainnet -X main.commitID=latest"
 # ===== SECOND STAGE ======
 FROM ubuntu:latest
 RUN apt-get update -y && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && apt-get install -y --no-install-recommends curl wget ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:8080/network/status || exit 1
 
 COPY --from=builder /mx-chain-proxy-go/cmd/proxy /mx-chain-proxy-go/cmd/proxy
 
