@@ -3,6 +3,7 @@ package process
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,7 +23,6 @@ import (
 )
 
 var log = logger.GetOrCreate("process")
-var mutHttpClient sync.RWMutex
 
 const (
 	nodeSyncedNonceDifferenceThreshold = 10
@@ -44,7 +44,8 @@ type BaseProcessor struct {
 	cancelFunc                     func()
 	noStatusCheck                  bool
 
-	httpClient *http.Client
+	httpClient        *http.Client
+	requestTimeoutSec int
 }
 
 // NewBaseProcessor creates a new instance of BaseProcessor struct
@@ -72,16 +73,14 @@ func NewBaseProcessor(
 		return nil, ErrNilPubKeyConverter
 	}
 
-	httpClient := http.DefaultClient
-	mutHttpClient.Lock()
-	httpClient.Timeout = time.Duration(requestTimeoutSec) * time.Second
-	mutHttpClient.Unlock()
+	httpClient := newHTTPClient(requestTimeoutSec)
 
 	bp := &BaseProcessor{
 		shardCoordinator:               shardCoord,
 		observersProvider:              observersProvider,
 		fullHistoryNodesProvider:       fullHistoryNodesProvider,
 		httpClient:                     httpClient,
+		requestTimeoutSec:              requestTimeoutSec,
 		pubKeyConverter:                pubKeyConverter,
 		shardIDs:                       computeShardIDs(shardCoord),
 		delayForCheckingNodesSyncState: stepDelayForCheckingNodesSyncState,
@@ -95,6 +94,25 @@ func NewBaseProcessor(
 	}
 
 	return bp, nil
+}
+
+func newHTTPClient(requestTimeoutSec int) *http.Client {
+	transport := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		MaxIdleConns:          256,
+		MaxIdleConnsPerHost:   64,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
+	}
+
+	return &http.Client{
+		Timeout:   time.Duration(requestTimeoutSec) * time.Second,
+		Transport: transport,
+	}
 }
 
 // StartNodesSyncStateChecks will simply start the goroutine that handles the nodes sync state
@@ -198,7 +216,10 @@ func (bp *BaseProcessor) CallGetRestEndPoint(
 	value interface{},
 ) (int, error) {
 
-	req, err := http.NewRequest("GET", address+path, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(bp.requestTimeoutSec)*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address+path, nil)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -256,7 +277,10 @@ func (bp *BaseProcessor) CallPostRestEndPoint(
 		return http.StatusInternalServerError, err
 	}
 
-	req, err := http.NewRequest("POST", address+path, bytes.NewReader(buff))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(bp.requestTimeoutSec)*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, address+path, bytes.NewReader(buff))
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}

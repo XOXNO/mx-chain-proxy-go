@@ -55,8 +55,12 @@ func CreateServer(
 	}
 
 	httpServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: ws,
+		Addr:              fmt.Sprintf(":%d", port),
+		Handler:           ws,
+		ReadTimeout:       5 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	return httpServer, nil

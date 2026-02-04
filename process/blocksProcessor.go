@@ -2,6 +2,7 @@ package process
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/multiversx/mx-chain-core-go/core/check"
 	"github.com/multiversx/mx-chain-core-go/data/api"
@@ -43,23 +44,62 @@ func (bp *BlocksProcessor) GetBlocksByRound(round uint64, options common.BlockQu
 
 	path := common.BuildUrlWithBlockQueryOptions(fmt.Sprintf("%s/%d", blockByRoundPath, round), options)
 
-	for _, shardID := range shardIDs {
-		observers, err := bp.proc.GetObservers(shardID, data.AvailabilityAll)
-		if err != nil {
-			return nil, err
-		}
+	type shardResult struct {
+		block    *api.Block
+		observer *data.NodeData
+		err      error
+	}
 
-		for _, observer := range observers {
-			block, err := bp.getBlockFromObserver(observer, path)
+	results := make(chan shardResult, len(shardIDs))
+	var wg sync.WaitGroup
+
+	for _, shardID := range shardIDs {
+		shardID := shardID
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			observers, err := bp.proc.GetObservers(shardID, data.AvailabilityAll)
 			if err != nil {
-				log.Error("block request failed", "shard id", observer.ShardId, "observer", observer.Address, "error", err.Error())
-				continue
+				results <- shardResult{err: err}
+				return
 			}
 
-			log.Info("block requested successfully", "shard id", observer.ShardId, "observer", observer.Address, "round", round)
-			ret.Data.Blocks = append(ret.Data.Blocks, block)
-			break
+			for _, observer := range observers {
+				block, err := bp.getBlockFromObserver(observer, path)
+				if err != nil {
+					log.Error("block request failed", "shard id", observer.ShardId, "observer", observer.Address, "error", err.Error())
+					continue
+				}
+
+				results <- shardResult{block: block, observer: observer}
+				return
+			}
+
+			results <- shardResult{}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var firstErr error
+	for res := range results {
+		if res.err != nil && firstErr == nil {
+			firstErr = res.err
+			continue
 		}
+		if res.block == nil || res.observer == nil {
+			continue
+		}
+
+		log.Info("block requested successfully", "shard id", res.observer.ShardId, "observer", res.observer.Address, "round", round)
+		ret.Data.Blocks = append(ret.Data.Blocks, res.block)
+	}
+
+	if firstErr != nil {
+		return nil, firstErr
 	}
 
 	return ret, nil

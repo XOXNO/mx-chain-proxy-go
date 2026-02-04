@@ -741,15 +741,7 @@ func (tp *TransactionProcessor) getTxFromObservers(txHash string, reqType reques
 			return nil, err
 		}
 
-		var getTxResponse *data.GetTransactionResponse
-		var withHttpError bool
-		var ok bool
-		for _, observerInShard := range nodesInShard {
-			getTxResponse, ok, withHttpError = tp.getTxFromObserver(observerInShard, txHash, withResults)
-			if !withHttpError {
-				break
-			}
-		}
+		getTxResponse, ok, _ := tp.raceGetTxFromObservers(nodesInShard, txHash, withResults)
 
 		if !ok || getTxResponse == nil {
 			continue
@@ -953,12 +945,8 @@ func (tp *TransactionProcessor) alterTxWithScResultsFromSourceIfNeeded(txHash st
 		return tx
 	}
 
-	for _, observer := range observers {
-		getTxResponse, ok, _ := tp.getTxFromObserver(observer, txHash, withResults)
-		if !ok {
-			continue
-		}
-
+	getTxResponse, ok, _ := tp.raceGetTxFromObservers(observers, txHash, withResults)
+	if ok && getTxResponse != nil {
 		alteredTxFromDest := tp.mergeScResultsFromSourceAndDestIfNeeded(&getTxResponse.Data.Transaction, tx, withResults)
 
 		shardIDWasFetch[tx.SourceShard] = &tupleHashWasFetched{
@@ -980,12 +968,8 @@ func (tp *TransactionProcessor) getTxWithSenderAddr(txHash, sender string, withR
 		return nil, err
 	}
 
-	for _, observer := range observers {
-		getTxResponse, ok, _ := tp.getTxFromObserver(observer, txHash, withResults)
-		if !ok {
-			continue
-		}
-
+	getTxResponse, ok, _ := tp.raceGetTxFromObservers(observers, txHash, withResults)
+	if ok && getTxResponse != nil {
 		rcvShardID, err := tp.getShardByAddress(getTxResponse.Data.Transaction.Receiver)
 		if err != nil {
 			log.Warn("cannot compute shard ID from receiver address",
@@ -1078,6 +1062,46 @@ func (tp *TransactionProcessor) getTxFromObserver(
 	return getTxResponse, true, false
 }
 
+type txObserverResult struct {
+	resp          *data.GetTransactionResponse
+	ok            bool
+	withHTTPError bool
+}
+
+func (tp *TransactionProcessor) raceGetTxFromObservers(
+	observers []*data.NodeData,
+	txHash string,
+	withResults bool,
+) (*data.GetTransactionResponse, bool, bool) {
+	if len(observers) == 0 {
+		return nil, false, false
+	}
+
+	results := make(chan txObserverResult, len(observers))
+	for _, observer := range observers {
+		observer := observer
+		go func() {
+			resp, ok, withHTTPError := tp.getTxFromObserver(observer, txHash, withResults)
+			results <- txObserverResult{
+				resp:          resp,
+				ok:            ok,
+				withHTTPError: withHTTPError,
+			}
+		}()
+	}
+
+	var last txObserverResult
+	for i := 0; i < len(observers); i++ {
+		res := <-results
+		last = res
+		if !res.withHTTPError {
+			return res.resp, res.ok, res.withHTTPError
+		}
+	}
+
+	return last.resp, last.ok, last.withHTTPError
+}
+
 func (tp *TransactionProcessor) getTxFromDestShard(txHash string, dstShardID uint32, withEvents bool) (*transaction.ApiTransactionResult, bool) {
 	// cross shard transaction
 	destinationShardObservers, err := tp.proc.GetObservers(dstShardID, data.AvailabilityAll)
@@ -1090,18 +1114,8 @@ func (tp *TransactionProcessor) getTxFromDestShard(txHash string, dstShardID uin
 		apiPath += withResultsParam
 	}
 
-	for _, dstObserver := range destinationShardObservers {
-		getTxResponseDst := &data.GetTransactionResponse{}
-		respCode, err := tp.proc.CallGetRestEndPoint(dstObserver.Address, apiPath, getTxResponseDst)
-		if err != nil {
-			log.Trace("cannot get transaction", "address", dstObserver.Address, "error", err)
-			continue
-		}
-
-		if respCode != http.StatusOK {
-			continue
-		}
-
+	getTxResponseDst, ok, _ := tp.raceGetTxFromObservers(destinationShardObservers, txHash, withEvents)
+	if ok && getTxResponseDst != nil {
 		return &getTxResponseDst.Data.Transaction, true
 	}
 
@@ -1349,12 +1363,8 @@ func (tp *TransactionProcessor) getTxPoolForShard(shardID uint32, fields string)
 		return nil, err
 	}
 
-	for _, observer := range observers {
-		txs, ok := tp.getTxPoolFromObserver(observer, fields)
-		if !ok {
-			continue
-		}
-
+	txs, ok := tp.raceTxPoolFromObservers(observers, fields)
+	if ok {
 		return txs, nil
 	}
 
@@ -1387,24 +1397,50 @@ func (tp *TransactionProcessor) getTxPoolFromObserver(
 	return &txsPoolResponse.Data.Transactions, true
 }
 
+type txPoolResult struct {
+	pool *data.TransactionsPool
+	ok   bool
+}
+
+func (tp *TransactionProcessor) raceTxPoolFromObservers(
+	observers []*data.NodeData,
+	fields string,
+) (*data.TransactionsPool, bool) {
+	if len(observers) == 0 {
+		return nil, false
+	}
+
+	results := make(chan txPoolResult, len(observers))
+	for _, observer := range observers {
+		observer := observer
+		go func() {
+			pool, ok := tp.getTxPoolFromObserver(observer, fields)
+			results <- txPoolResult{pool: pool, ok: ok}
+		}()
+	}
+
+	for i := 0; i < len(observers); i++ {
+		res := <-results
+		if res.ok {
+			return res.pool, true
+		}
+	}
+
+	return nil, false
+}
+
 func (tp *TransactionProcessor) getTxPoolForSender(sender, fields string) (*data.TransactionsPoolForSender, error) {
 	observers, _, err := tp.getShardObserversForSender(sender, requestTypeObservers)
 	if err != nil {
 		return nil, err
 	}
 
-	txsInPool := &data.TransactionsPoolForSender{
-		Transactions: []data.WrappedTransaction{},
-	}
-	var ok bool
-	for _, observer := range observers {
-		txsInPool, ok = tp.getTxPoolForSenderFromObserver(observer, sender, fields)
-		if ok {
-			break
-		}
+	txsInPool, ok := tp.raceTxPoolForSenderFromObservers(observers, sender, fields)
+	if ok {
+		return txsInPool, nil
 	}
 
-	return txsInPool, nil
+	return &data.TransactionsPoolForSender{Transactions: []data.WrappedTransaction{}}, nil
 }
 
 func (tp *TransactionProcessor) getTxPoolForSenderFromObserver(
@@ -1433,18 +1469,47 @@ func (tp *TransactionProcessor) getTxPoolForSenderFromObserver(
 	return &txsPoolResponse.Data.TxPool, true
 }
 
+type txPoolForSenderResult struct {
+	pool *data.TransactionsPoolForSender
+	ok   bool
+}
+
+func (tp *TransactionProcessor) raceTxPoolForSenderFromObservers(
+	observers []*data.NodeData,
+	sender string,
+	fields string,
+) (*data.TransactionsPoolForSender, bool) {
+	if len(observers) == 0 {
+		return nil, false
+	}
+
+	results := make(chan txPoolForSenderResult, len(observers))
+	for _, observer := range observers {
+		observer := observer
+		go func() {
+			pool, ok := tp.getTxPoolForSenderFromObserver(observer, sender, fields)
+			results <- txPoolForSenderResult{pool: pool, ok: ok}
+		}()
+	}
+
+	for i := 0; i < len(observers); i++ {
+		res := <-results
+		if res.ok {
+			return res.pool, true
+		}
+	}
+
+	return nil, false
+}
+
 func (tp *TransactionProcessor) getLastTxPoolNonceForSender(sender string) (uint64, error) {
 	observers, _, err := tp.getShardObserversForSender(sender, requestTypeObservers)
 	if err != nil {
 		return 0, err
 	}
 
-	for _, observer := range observers {
-		nonce, ok := tp.getLastTxPoolNonceFromObserver(observer, sender)
-		if !ok {
-			continue
-		}
-
+	nonce, ok := tp.raceLastNonceFromObservers(observers, sender)
+	if ok {
 		return nonce, nil
 	}
 
@@ -1476,24 +1541,50 @@ func (tp *TransactionProcessor) getLastTxPoolNonceFromObserver(
 	return lastNonceResponse.Data.Nonce, true
 }
 
+type lastNonceResult struct {
+	nonce uint64
+	ok    bool
+}
+
+func (tp *TransactionProcessor) raceLastNonceFromObservers(
+	observers []*data.NodeData,
+	sender string,
+) (uint64, bool) {
+	if len(observers) == 0 {
+		return 0, false
+	}
+
+	results := make(chan lastNonceResult, len(observers))
+	for _, observer := range observers {
+		observer := observer
+		go func() {
+			nonce, ok := tp.getLastTxPoolNonceFromObserver(observer, sender)
+			results <- lastNonceResult{nonce: nonce, ok: ok}
+		}()
+	}
+
+	for i := 0; i < len(observers); i++ {
+		res := <-results
+		if res.ok {
+			return res.nonce, true
+		}
+	}
+
+	return 0, false
+}
+
 func (tp *TransactionProcessor) getTxPoolNonceGapsForSender(sender string) (*data.TransactionsPoolNonceGaps, error) {
 	observers, _, err := tp.getShardObserversForSender(sender, requestTypeObservers)
 	if err != nil {
 		return nil, err
 	}
 
-	nonceGaps := &data.TransactionsPoolNonceGaps{
-		Gaps: []data.NonceGap{},
-	}
-	var ok bool
-	for _, observer := range observers {
-		nonceGaps, ok = tp.getTxPoolNonceGapsFromObserver(observer, sender)
-		if ok {
-			break
-		}
+	nonceGaps, ok := tp.raceNonceGapsFromObservers(observers, sender)
+	if ok {
+		return nonceGaps, nil
 	}
 
-	return nonceGaps, nil
+	return &data.TransactionsPoolNonceGaps{Gaps: []data.NonceGap{}}, nil
 }
 
 func (tp *TransactionProcessor) getTxPoolNonceGapsFromObserver(
@@ -1519,4 +1610,36 @@ func (tp *TransactionProcessor) getTxPoolNonceGapsFromObserver(
 	}
 
 	return &nonceGapsResponse.Data.NonceGaps, true
+}
+
+type nonceGapsResult struct {
+	gaps *data.TransactionsPoolNonceGaps
+	ok   bool
+}
+
+func (tp *TransactionProcessor) raceNonceGapsFromObservers(
+	observers []*data.NodeData,
+	sender string,
+) (*data.TransactionsPoolNonceGaps, bool) {
+	if len(observers) == 0 {
+		return nil, false
+	}
+
+	results := make(chan nonceGapsResult, len(observers))
+	for _, observer := range observers {
+		observer := observer
+		go func() {
+			gaps, ok := tp.getTxPoolNonceGapsFromObserver(observer, sender)
+			results <- nonceGapsResult{gaps: gaps, ok: ok}
+		}()
+	}
+
+	for i := 0; i < len(observers); i++ {
+		res := <-results
+		if res.ok {
+			return res.gaps, true
+		}
+	}
+
+	return nil, false
 }
