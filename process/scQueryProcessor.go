@@ -81,6 +81,7 @@ func (scQueryProcessor *SCQueryProcessor) ExecuteQuery(query *data.SCQuery) (*vm
 		isObserverDown := httpStatus == http.StatusNotFound || httpStatus == http.StatusRequestTimeout
 		isOk := httpStatus == http.StatusOK
 		responseHasExplicitError := len(response.Error) > 0
+		isBadRequest := httpStatus == http.StatusBadRequest
 
 		if isObserverDown {
 			log.LogIfError(err)
@@ -94,6 +95,12 @@ func (scQueryProcessor *SCQueryProcessor) ExecuteQuery(query *data.SCQuery) (*vm
 
 		if responseHasExplicitError {
 			return nil, data.BlockInfo{}, fmt.Errorf(response.Error)
+		}
+
+		// Retry on 400 without explicit error (likely observer issue)
+		if isBadRequest {
+			log.LogIfError(err)
+			continue
 		}
 
 		return nil, data.BlockInfo{}, err
