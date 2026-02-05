@@ -25,9 +25,10 @@ import (
 var log = logger.GetOrCreate("process")
 
 const (
-	nodeSyncedNonceDifferenceThreshold = 10
-	stepDelayForCheckingNodesSyncState = 1 * time.Minute
-	timeoutDurationForNodeStatus       = 2 * time.Second
+	nodeSyncedNonceDifferenceThreshold      = 10
+	crossShardNonceDifferenceThreshold      = 100
+	stepDelayForCheckingNodesSyncState      = 1 * time.Minute
+	timeoutDurationForNodeStatus            = 2 * time.Second
 )
 
 // BaseProcessor represents an implementation of CoreProcessor that helps to process requests
@@ -409,10 +410,12 @@ func (bp *BaseProcessor) handleNodes() {
 func (bp *BaseProcessor) updateNodesWithSync() {
 	observers := bp.observersProvider.GetAllNodesWithSyncState()
 	observersWithSyncStatus := bp.getNodesWithSyncStatus(observers)
+	bp.crossValidateNodesByNonce(observersWithSyncStatus)
 	bp.observersProvider.UpdateNodesBasedOnSyncState(observersWithSyncStatus)
 
 	fullHistoryNodes := bp.fullHistoryNodesProvider.GetAllNodesWithSyncState()
 	fullHistoryNodesWithSyncStatus := bp.getNodesWithSyncStatus(fullHistoryNodes)
+	bp.crossValidateNodesByNonce(fullHistoryNodesWithSyncStatus)
 	bp.fullHistoryNodesProvider.UpdateNodesBasedOnSyncState(fullHistoryNodesWithSyncStatus)
 }
 
@@ -432,6 +435,38 @@ func (bp *BaseProcessor) getNodesWithSyncStatus(nodes []*proxyData.NodeData) []*
 	return nodesToReturn
 }
 
+// crossValidateNodesByNonce compares nonces between nodes in the same shard
+// and marks nodes as out-of-sync if they're significantly behind the highest nonce in their shard
+func (bp *BaseProcessor) crossValidateNodesByNonce(nodes []*proxyData.NodeData) {
+	// Group nodes by shard and find highest nonce per shard
+	highestNoncePerShard := make(map[uint32]uint64)
+	for _, node := range nodes {
+		if !node.IsSynced {
+			continue
+		}
+		if node.Nonce > highestNoncePerShard[node.ShardId] {
+			highestNoncePerShard[node.ShardId] = node.Nonce
+		}
+	}
+
+	// Mark nodes as out-of-sync if they're significantly behind the highest nonce in their shard
+	for _, node := range nodes {
+		if !node.IsSynced {
+			continue
+		}
+		highestNonce := highestNoncePerShard[node.ShardId]
+		if highestNonce > node.Nonce && highestNonce-node.Nonce > crossShardNonceDifferenceThreshold {
+			log.Warn("node is behind other nodes in same shard, marking as out-of-sync",
+				"address", node.Address,
+				"shard", node.ShardId,
+				"nonce", node.Nonce,
+				"highest nonce in shard", highestNonce,
+				"difference", highestNonce-node.Nonce)
+			node.IsSynced = false
+		}
+	}
+}
+
 func (bp *BaseProcessor) isNodeSynced(node *proxyData.NodeData) (bool, error) {
 	nodeStatusResponse, httpCode, err := bp.nodeStatusFetcher(node.Address)
 	if err != nil {
@@ -444,6 +479,9 @@ func (bp *BaseProcessor) isNodeSynced(node *proxyData.NodeData) (bool, error) {
 	nonce := nodeStatusResponse.Data.Metrics.Nonce
 	probableHighestNonce := nodeStatusResponse.Data.Metrics.ProbableHighestNonce
 	isReadyForVMQueries := parseBool(nodeStatusResponse.Data.Metrics.AreVmQueriesReady)
+
+	// Store nonce for cross-shard validation
+	node.Nonce = nonce
 
 	// In some cases, the probableHighestNonce can be lower than the nonce. In this case we consider the node as synced
 	// as the nonce metric can be updated faster than the other one

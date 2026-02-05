@@ -7,6 +7,7 @@ type NodeData struct {
 	IsSynced       bool
 	IsFallback     bool
 	IsSnapshotless bool
+	Nonce          uint64
 }
 
 // NodesReloadResponse is a DTO that holds details about nodes reloading

@@ -580,8 +580,8 @@ func TestBaseProcessor_HandleNodesSyncStateShouldSetNodeOutOfSyncIfVMQueriesNotR
 				}
 			},
 			UpdateNodesBasedOnSyncStateCalled: func(nodesWithSyncStatus []*data.NodeData) {
-				require.Equal(t, &data.NodeData{Address: "address0", IsSynced: false}, nodesWithSyncStatus[0])
-				require.Equal(t, &data.NodeData{Address: "address1", IsSynced: false}, nodesWithSyncStatus[1])
+				require.Equal(t, &data.NodeData{Address: "address0", IsSynced: false, Nonce: 10}, nodesWithSyncStatus[0])
+				require.Equal(t, &data.NodeData{Address: "address1", IsSynced: false, Nonce: 10}, nodesWithSyncStatus[1])
 				atomic.AddUint32(&numTimesUpdateNodesWasCalled, 1)
 			},
 		},
@@ -753,7 +753,7 @@ func TestBaseProcessor_HandleNodesSyncStateShouldConsiderNodeAsOnlineIfProbableN
 				}
 			},
 			UpdateNodesBasedOnSyncStateCalled: func(nodesWithSyncStatus []*data.NodeData) {
-				require.Equal(t, &data.NodeData{Address: "address0", IsSynced: true}, nodesWithSyncStatus[0])
+				require.Equal(t, &data.NodeData{Address: "address0", IsSynced: true, Nonce: 37}, nodesWithSyncStatus[0])
 				atomic.AddUint32(&numTimesUpdateNodesWasCalled, 1)
 			},
 		},
@@ -800,8 +800,8 @@ func TestBaseProcessor_HandleNodesSyncState(t *testing.T) {
 				}
 			},
 			UpdateNodesBasedOnSyncStateCalled: func(nodesWithSyncStatus []*data.NodeData) {
-				require.Equal(t, &data.NodeData{Address: "address0", IsSynced: true}, nodesWithSyncStatus[0])
-				require.Equal(t, &data.NodeData{Address: "address1", IsSynced: false}, nodesWithSyncStatus[1])
+				require.Equal(t, &data.NodeData{Address: "address0", IsSynced: true, Nonce: 10}, nodesWithSyncStatus[0])
+				require.Equal(t, &data.NodeData{Address: "address1", IsSynced: false, Nonce: 10}, nodesWithSyncStatus[1])
 				atomic.AddUint32(&numTimesUpdateNodesWasCalled, 1)
 			},
 		},
@@ -813,8 +813,8 @@ func TestBaseProcessor_HandleNodesSyncState(t *testing.T) {
 				}
 			},
 			UpdateNodesBasedOnSyncStateCalled: func(nodesWithSyncStatus []*data.NodeData) {
-				require.Equal(t, &data.NodeData{Address: "fhaddress0", IsSynced: true}, nodesWithSyncStatus[0])
-				require.Equal(t, &data.NodeData{Address: "fhaddress1", IsSynced: false}, nodesWithSyncStatus[1])
+				require.Equal(t, &data.NodeData{Address: "fhaddress0", IsSynced: true, Nonce: 10}, nodesWithSyncStatus[0])
+				require.Equal(t, &data.NodeData{Address: "fhaddress1", IsSynced: false, Nonce: 10}, nodesWithSyncStatus[1])
 				atomic.AddUint32(&numTimesUpdateNodesWasCalled, 1)
 			},
 		},
@@ -844,6 +844,109 @@ func TestBaseProcessor_HandleNodesSyncState(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	require.GreaterOrEqual(t, atomic.LoadUint32(&numTimesUpdateNodesWasCalled), uint32(2))
+
+	_ = bp.Close()
+	time.Sleep(50 * time.Millisecond)
+}
+
+func TestBaseProcessor_HandleNodesSyncStateCrossValidation(t *testing.T) {
+	t.Parallel()
+
+	numTimesUpdateNodesWasCalled := uint32(0)
+
+	bp, _ := process.NewBaseProcessor(
+		5,
+		&mock.ShardCoordinatorMock{},
+		&mock.ObserversProviderStub{
+			GetAllNodesWithSyncStateCalled: func() []*data.NodeData {
+				return []*data.NodeData{
+					{Address: "address0", ShardId: 0, IsSynced: true},           // will have nonce 1000
+					{Address: "address1", ShardId: 0, IsSynced: true},           // will have nonce 800 (200 behind, should be marked out-of-sync)
+					{Address: "address2", ShardId: 0, IsSynced: true},           // will have nonce 950 (50 behind, should stay synced)
+					{Address: "address_meta", ShardId: 4294967295, IsSynced: true}, // metachain, nonce 500
+				}
+			},
+			UpdateNodesBasedOnSyncStateCalled: func(nodesWithSyncStatus []*data.NodeData) {
+				// address0 has highest nonce, should be synced
+				require.Equal(t, "address0", nodesWithSyncStatus[0].Address)
+				require.True(t, nodesWithSyncStatus[0].IsSynced)
+				require.Equal(t, uint64(1000), nodesWithSyncStatus[0].Nonce)
+
+				// address1 is 200 blocks behind (> 100 threshold), should be out-of-sync
+				require.Equal(t, "address1", nodesWithSyncStatus[1].Address)
+				require.False(t, nodesWithSyncStatus[1].IsSynced)
+				require.Equal(t, uint64(800), nodesWithSyncStatus[1].Nonce)
+
+				// address2 is only 50 blocks behind (< 100 threshold), should stay synced
+				require.Equal(t, "address2", nodesWithSyncStatus[2].Address)
+				require.True(t, nodesWithSyncStatus[2].IsSynced)
+				require.Equal(t, uint64(950), nodesWithSyncStatus[2].Nonce)
+
+				// address_meta is in different shard, not affected by shard 0 nonces
+				require.Equal(t, "address_meta", nodesWithSyncStatus[3].Address)
+				require.True(t, nodesWithSyncStatus[3].IsSynced)
+				require.Equal(t, uint64(500), nodesWithSyncStatus[3].Nonce)
+
+				atomic.AddUint32(&numTimesUpdateNodesWasCalled, 1)
+			},
+		},
+		&mock.ObserversProviderStub{},
+		&mock.PubKeyConverterMock{},
+		false,
+	)
+
+	bp.SetNodeStatusFetcher(func(url string) (*data.NodeStatusAPIResponse, int, error) {
+		switch url {
+		case "address0":
+			return &data.NodeStatusAPIResponse{
+				Data: data.NodeStatusAPIResponseData{
+					Metrics: data.NodeStatusResponse{
+						Nonce:                1000,
+						ProbableHighestNonce: 1000,
+						AreVmQueriesReady:    "true",
+					},
+				},
+			}, 200, nil
+		case "address1":
+			return &data.NodeStatusAPIResponse{
+				Data: data.NodeStatusAPIResponseData{
+					Metrics: data.NodeStatusResponse{
+						Nonce:                800, // 200 behind highest in shard
+						ProbableHighestNonce: 800, // thinks it's synced
+						AreVmQueriesReady:    "true",
+					},
+				},
+			}, 200, nil
+		case "address2":
+			return &data.NodeStatusAPIResponse{
+				Data: data.NodeStatusAPIResponseData{
+					Metrics: data.NodeStatusResponse{
+						Nonce:                950, // 50 behind highest in shard
+						ProbableHighestNonce: 950,
+						AreVmQueriesReady:    "true",
+					},
+				},
+			}, 200, nil
+		case "address_meta":
+			return &data.NodeStatusAPIResponse{
+				Data: data.NodeStatusAPIResponseData{
+					Metrics: data.NodeStatusResponse{
+						Nonce:                500,
+						ProbableHighestNonce: 500,
+						AreVmQueriesReady:    "true",
+					},
+				},
+			}, 200, nil
+		}
+		return nil, 400, nil
+	})
+
+	bp.SetDelayForCheckingNodesSyncState(5 * time.Millisecond)
+	bp.StartNodesSyncStateChecks()
+
+	time.Sleep(50 * time.Millisecond)
+
+	require.GreaterOrEqual(t, atomic.LoadUint32(&numTimesUpdateNodesWasCalled), uint32(1))
 
 	_ = bp.Close()
 	time.Sleep(50 * time.Millisecond)
