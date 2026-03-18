@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/multiversx/mx-chain-proxy-go/data"
+	"github.com/multiversx/mx-chain-proxy-go/metrics"
 )
 
 // ReturnCodeRequestError defines a request which hasn't been executed successfully due to a bad request received
@@ -47,6 +48,7 @@ func (rl *rateLimiter) MiddlewareHandlerFunc() gin.HandlerFunc {
 
 		numRequests := rl.addInRequestsMap(key)
 		if numRequests >= limitForEndpoint {
+			metrics.GetProxyMetrics().IncrementRateLimitHit(endpoint)
 			printMessage := fmt.Sprintf("your IP exceeded the limit of %d requests in %v for this endpoint", limitForEndpoint, rl.countDuration)
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, data.GenericAPIResponse{
 				Data:  nil,

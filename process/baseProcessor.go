@@ -19,6 +19,7 @@ import (
 	logger "github.com/multiversx/mx-chain-logger-go"
 	"github.com/multiversx/mx-chain-proxy-go/common"
 	proxyData "github.com/multiversx/mx-chain-proxy-go/data"
+	"github.com/multiversx/mx-chain-proxy-go/metrics"
 	"github.com/multiversx/mx-chain-proxy-go/observer"
 )
 
@@ -229,10 +230,15 @@ func (bp *BaseProcessor) CallGetRestEndPoint(
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", userAgent)
 
+	start := time.Now()
 	resp, err := bp.httpClient.Do(req)
 	if err != nil {
+		duration := time.Since(start)
+		isTimeout := isTimeoutError(err)
+		metrics.GetProxyMetrics().AddObserverData(address, true, isTimeout, duration)
+
 		bp.triggerNodesSyncCheck(address)
-		if isTimeoutError(err) {
+		if isTimeout {
 			return http.StatusRequestTimeout, err
 		}
 
@@ -256,7 +262,11 @@ func (bp *BaseProcessor) CallGetRestEndPoint(
 		return http.StatusInternalServerError, err
 	}
 
+	duration := time.Since(start)
 	responseStatusCode := resp.StatusCode
+	withError := responseStatusCode != http.StatusOK
+	metrics.GetProxyMetrics().AddObserverData(address, withError, false, duration)
+
 	if responseStatusCode == http.StatusOK { // everything ok, return status ok and the expected response
 		return responseStatusCode, nil
 	}
@@ -291,10 +301,15 @@ func (bp *BaseProcessor) CallPostRestEndPoint(
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", userAgent)
 
+	start := time.Now()
 	resp, err := bp.httpClient.Do(req)
 	if err != nil {
+		duration := time.Since(start)
+		isTimeout := isTimeoutError(err)
+		metrics.GetProxyMetrics().AddObserverData(address, true, isTimeout, duration)
+
 		bp.triggerNodesSyncCheck(address)
-		if isTimeoutError(err) {
+		if isTimeout {
 			return http.StatusRequestTimeout, err
 		}
 
@@ -313,7 +328,11 @@ func (bp *BaseProcessor) CallPostRestEndPoint(
 		return http.StatusInternalServerError, err
 	}
 
+	duration := time.Since(start)
 	responseStatusCode := resp.StatusCode
+	withError := responseStatusCode != http.StatusOK
+	metrics.GetProxyMetrics().AddObserverData(address, withError, false, duration)
+
 	if responseStatusCode == http.StatusOK { // everything ok, return status ok and the expected response
 		return responseStatusCode, json.Unmarshal(responseBodyBytes, response)
 	}
@@ -463,6 +482,7 @@ func (bp *BaseProcessor) crossValidateNodesByNonce(nodes []*proxyData.NodeData) 
 				"highest nonce in shard", highestNonce,
 				"difference", highestNonce-node.Nonce)
 			node.IsSynced = false
+			metrics.GetProxyMetrics().IncrementStuckNode()
 		}
 	}
 }

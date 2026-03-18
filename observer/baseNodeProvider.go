@@ -8,6 +8,7 @@ import (
 	"github.com/multiversx/mx-chain-core-go/core"
 	"github.com/multiversx/mx-chain-proxy-go/config"
 	"github.com/multiversx/mx-chain-proxy-go/data"
+	"github.com/multiversx/mx-chain-proxy-go/metrics"
 	"github.com/multiversx/mx-chain-proxy-go/observer/holder"
 )
 
@@ -191,21 +192,25 @@ func (bnp *baseNodeProvider) getSyncedNodesForShardUnprotected(shardID uint32, d
 
 	syncedNodes = bnp.getSyncedNodes(dataAvailability, shardID)
 	if len(syncedNodes) != 0 {
+		metrics.GetProxyMetrics().IncrementFailoverTier(shardID, "synced")
 		return syncedNodes, nil
 	}
 
 	fallbackNodesSource := bnp.getFallbackNodes(dataAvailability, shardID)
 	if len(fallbackNodesSource) != 0 {
+		metrics.GetProxyMetrics().IncrementFailoverTier(shardID, "synced-fallback")
 		return fallbackNodesSource, nil
 	}
 
 	outOfSyncNodes := bnp.getOutOfSyncNodes(dataAvailability, shardID)
 	if len(outOfSyncNodes) > 0 {
+		metrics.GetProxyMetrics().IncrementFailoverTier(shardID, "out-of-sync")
 		return outOfSyncNodes, nil
 	}
 
 	outOfSyncFallbackNodesSource := bnp.getOutOfSyncFallbackNodes(dataAvailability, shardID)
 	if len(outOfSyncFallbackNodesSource) != 0 {
+		metrics.GetProxyMetrics().IncrementFailoverTier(shardID, "out-of-sync-fallback")
 		return outOfSyncFallbackNodesSource, nil
 	}
 

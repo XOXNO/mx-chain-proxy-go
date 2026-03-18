@@ -13,6 +13,7 @@ import (
 	"github.com/multiversx/mx-chain-core-go/core"
 	"github.com/multiversx/mx-chain-core-go/core/check"
 	"github.com/multiversx/mx-chain-proxy-go/data"
+	"github.com/multiversx/mx-chain-proxy-go/metrics"
 )
 
 const (
@@ -111,9 +112,11 @@ func computeTokenStorageKey(tokenID string, nonce uint64) string {
 func (ngp *NodeGroupProcessor) GetHeartbeatData() (*data.HeartbeatResponse, error) {
 	heartbeatsToReturn, err := ngp.cacher.LoadHeartbeats()
 	if err == nil {
+		metrics.GetProxyMetrics().IncrementCacheHit("heartbeats")
 		return heartbeatsToReturn, nil
 	}
 
+	metrics.GetProxyMetrics().IncrementCacheMiss("heartbeats")
 	log.Info("heartbeat: cannot get from cache. Will fetch from API", "error", err.Error())
 
 	return ngp.getHeartbeatsFromApi()

@@ -7,6 +7,7 @@ import (
 	"github.com/multiversx/mx-chain-core-go/core"
 	"github.com/multiversx/mx-chain-core-go/core/check"
 	"github.com/multiversx/mx-chain-proxy-go/data"
+	"github.com/multiversx/mx-chain-proxy-go/metrics"
 )
 
 const (
@@ -50,9 +51,11 @@ func NewValidatorStatisticsProcessor(
 func (vsp *ValidatorStatisticsProcessor) GetValidatorStatistics() (*data.ValidatorStatisticsResponse, error) {
 	valStatsToReturn, err := vsp.cacher.LoadValStats()
 	if err == nil {
+		metrics.GetProxyMetrics().IncrementCacheHit("validator-statistics")
 		return &data.ValidatorStatisticsResponse{Statistics: valStatsToReturn}, nil
 	}
 
+	metrics.GetProxyMetrics().IncrementCacheMiss("validator-statistics")
 	log.Info("validator statistics: cannot get from cache. Will fetch from API", "error", err.Error())
 
 	return vsp.getValidatorStatisticsFromApi()

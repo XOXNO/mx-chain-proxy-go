@@ -102,6 +102,9 @@ func (sm *statusMetrics) GetMetricsForPrometheus() string {
 		}
 	}
 
+	// Append proxy operational metrics
+	stringBuilder.WriteString(GetProxyMetrics().GetPrometheusMetrics())
+
 	return stringBuilder.String()
 }
 

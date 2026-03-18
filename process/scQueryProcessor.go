@@ -10,6 +10,7 @@ import (
 	"github.com/multiversx/mx-chain-core-go/core/check"
 	"github.com/multiversx/mx-chain-core-go/data/vm"
 	"github.com/multiversx/mx-chain-proxy-go/data"
+	"github.com/multiversx/mx-chain-proxy-go/metrics"
 	"github.com/multiversx/mx-chain-proxy-go/observer/availabilityCommon"
 )
 
@@ -85,6 +86,7 @@ func (scQueryProcessor *SCQueryProcessor) ExecuteQuery(query *data.SCQuery) (*vm
 
 		if isObserverDown {
 			log.LogIfError(err)
+			metrics.GetProxyMetrics().IncrementRetry(scQueryServicePath)
 			continue
 		}
 
@@ -100,6 +102,7 @@ func (scQueryProcessor *SCQueryProcessor) ExecuteQuery(query *data.SCQuery) (*vm
 		// Retry on 400 without explicit error (likely observer issue)
 		if isBadRequest {
 			log.LogIfError(err)
+			metrics.GetProxyMetrics().IncrementRetry(scQueryServicePath)
 			continue
 		}
 
