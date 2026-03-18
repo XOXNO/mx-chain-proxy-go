@@ -78,11 +78,28 @@ func (sm *statusMetrics) GetMetricsForPrometheus() string {
 	stringBuilder := strings.Builder{}
 
 	for endpointPath, endpointData := range metricsMap {
-		stringBuilder.WriteString(fmt.Sprintf("num_requests{endpoint=\"%s\"} %d\n", endpointPath, endpointData.NumRequests))
-		stringBuilder.WriteString(fmt.Sprintf("num_errors{endpoint=\"%s\"} %d\n", endpointPath, endpointData.NumErrors))
-		stringBuilder.WriteString(fmt.Sprintf("total_response_time_ns{endpoint=\"%s\"} %d\n", endpointPath, endpointData.TotalResponseTime))
-		stringBuilder.WriteString(fmt.Sprintf("highest_response_time_ns{endpoint=\"%s\"} %d\n", endpointPath, endpointData.HighestResponseTime))
-		stringBuilder.WriteString(fmt.Sprintf("lowest_response_time_ns{endpoint=\"%s\"} %d\n", endpointPath, endpointData.LowestResponseTime))
+		if strings.HasPrefix(endpointPath, "vm-query:") {
+			// Parse "vm-query:funcName@scAddress" into separate labels
+			remainder := strings.TrimPrefix(endpointPath, "vm-query:")
+			parts := strings.SplitN(remainder, "@", 2)
+			funcName := parts[0]
+			scAddress := ""
+			if len(parts) == 2 {
+				scAddress = parts[1]
+			}
+			labels := fmt.Sprintf("func_name=\"%s\", sc_address=\"%s\"", funcName, scAddress)
+			stringBuilder.WriteString(fmt.Sprintf("vm_query_num_requests{%s} %d\n", labels, endpointData.NumRequests))
+			stringBuilder.WriteString(fmt.Sprintf("vm_query_num_errors{%s} %d\n", labels, endpointData.NumErrors))
+			stringBuilder.WriteString(fmt.Sprintf("vm_query_total_response_time_ns{%s} %d\n", labels, endpointData.TotalResponseTime))
+			stringBuilder.WriteString(fmt.Sprintf("vm_query_highest_response_time_ns{%s} %d\n", labels, endpointData.HighestResponseTime))
+			stringBuilder.WriteString(fmt.Sprintf("vm_query_lowest_response_time_ns{%s} %d\n", labels, endpointData.LowestResponseTime))
+		} else {
+			stringBuilder.WriteString(fmt.Sprintf("num_requests{endpoint=\"%s\"} %d\n", endpointPath, endpointData.NumRequests))
+			stringBuilder.WriteString(fmt.Sprintf("num_errors{endpoint=\"%s\"} %d\n", endpointPath, endpointData.NumErrors))
+			stringBuilder.WriteString(fmt.Sprintf("total_response_time_ns{endpoint=\"%s\"} %d\n", endpointPath, endpointData.TotalResponseTime))
+			stringBuilder.WriteString(fmt.Sprintf("highest_response_time_ns{endpoint=\"%s\"} %d\n", endpointPath, endpointData.HighestResponseTime))
+			stringBuilder.WriteString(fmt.Sprintf("lowest_response_time_ns{endpoint=\"%s\"} %d\n", endpointPath, endpointData.LowestResponseTime))
+		}
 	}
 
 	return stringBuilder.String()

@@ -103,6 +103,12 @@ func (group *vmValuesGroup) doExecuteQuery(context *gin.Context) (*vm.VMOutputAp
 		return nil, data.BlockInfo{}, apiErrors.ErrInvalidJSONRequest
 	}
 
+	// Store funcName and scAddress in gin context for per-function metrics tracking
+	if request.FuncName != "" {
+		context.Set("vm_func_name", request.FuncName)
+		context.Set("vm_sc_address", request.ScAddress)
+	}
+
 	command, err := createSCQuery(&request)
 	if err != nil {
 		return nil, data.BlockInfo{}, err

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -42,6 +43,14 @@ func (mm *metricsMiddleware) MiddlewareHandlerFunc() gin.HandlerFunc {
 		withError := status != http.StatusOK
 
 		mm.statusMetricsExtractor.AddRequestData(c.FullPath(), withError, duration)
+
+		// Record per-function metrics for VM queries
+		funcName, hasFuncName := c.Get("vm_func_name")
+		scAddress, hasScAddress := c.Get("vm_sc_address")
+		if hasFuncName && hasScAddress {
+			vmQueryKey := fmt.Sprintf("vm-query:%s@%s", funcName, scAddress)
+			mm.statusMetricsExtractor.AddRequestData(vmQueryKey, withError, duration)
+		}
 	}
 }
 
